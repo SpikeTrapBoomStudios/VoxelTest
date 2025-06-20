@@ -1,0 +1,55 @@
+[gd_scene load_steps=9 format=3 uid="uid://cebcgsvggrd74"]
+
+[ext_resource type="PackedScene" uid="uid://cm4e6gfebebtu" path="res://main/misc/basic_free_cam.tscn" id="2_71nyu"]
+
+[sub_resource type="Gradient" id="Gradient_71nyu"]
+colors = PackedColorArray(0, 0, 0, 1, 0.194349, 0.194349, 0.194349, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_7jovj"]
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ym2ng"]
+width = 2048
+height = 2048
+color_ramp = SubResource("Gradient_71nyu")
+noise = SubResource("FastNoiseLite_7jovj")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4spbj"]
+albedo_texture = SubResource("NoiseTexture2D_ym2ng")
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_qgemw"]
+material = SubResource("StandardMaterial3D_4spbj")
+size = Vector2(100, 100)
+
+[sub_resource type="Environment" id="Environment_71nyu"]
+background_mode = 1
+background_color = Color(0.36, 0.616, 1, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.462291, 0.462291, 0.462291, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ews6d"]
+size = Vector3(1, 100, 1)
+
+[node name="World" type="Node3D"]
+
+[node name="BasicFreeCam" parent="." instance=ExtResource("2_71nyu")]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 2, 0)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_qgemw")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_71nyu")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 1.1759, 0)
+shadow_enabled = true
+shadow_normal_bias = 0.0
+shadow_blur = 1.25
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 350.0
+directional_shadow_pancake_size = 0.1
+sky_mode = 1
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 50, 0)
+mesh = SubResource("BoxMesh_ews6d")

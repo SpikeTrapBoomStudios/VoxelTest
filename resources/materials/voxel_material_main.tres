@@ -1,0 +1,10 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3 uid="uid://da5ds5j78gayj"]
+
+[ext_resource type="Shader" uid="uid://blblgkhp06gi4" path="res://resources/shaders/voxel_shader_main.gdshader" id="1_sye67"]
+[ext_resource type="CompressedTexture2DArray" uid="uid://bjxc0l0xyxmhg" path="res://resources/textures/block/main_block_atlas.png" id="2_kv6h7"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_sye67")
+shader_parameter/atlas_texture_near = ExtResource("2_kv6h7")
+shader_parameter/atlas_texture_far = ExtResource("2_kv6h7")

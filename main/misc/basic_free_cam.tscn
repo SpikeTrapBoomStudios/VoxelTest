@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3 uid="uid://cm4e6gfebebtu"]
+
+[ext_resource type="Script" uid="uid://0imeytwfqol3" path="res://main/misc/basic_free_cam.gd" id="1_scil2"]
+
+[node name="BasicFreeCam" type="Camera3D"]
+current = true
+script = ExtResource("1_scil2")
+
+[node name="FPSCounter" type="Label" parent="."]
+offset_right = 40.0
+offset_bottom = 23.0
+text = "FPS: null"
+metadata/_edit_use_anchors_ = true

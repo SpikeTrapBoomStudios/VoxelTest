@@ -1,0 +1,9 @@
+[gd_resource type="FastNoiseLite" format=3 uid="uid://clgpatc74cb5w"]
+
+[resource]
+frequency = 0.001
+fractal_octaves = 6
+fractal_lacunarity = 2.1
+fractal_gain = 0.55
+fractal_weighted_strength = 0.1
+domain_warp_fractal_type = 0

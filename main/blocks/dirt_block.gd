@@ -1,0 +1,2 @@
+extends BlockDefinition
+class_name DirtBlock
