@@ -2,16 +2,16 @@
 
 importer="2d_array_texture"
 type="CompressedTexture2DArray"
-uid="uid://bjxc0l0xyxmhg"
-path="res://.godot/imported/main_block_atlas.png-fd8c467ff8c806b27f5ad61eaa916704.ctexarray"
+uid="uid://dcd2fvi2a7e7i"
+path="res://.godot/imported/main_block_atlas_far.png-6c480a549e735221d22e3791d329bf24.ctexarray"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://resources/textures/block/main_block_atlas.png"
-dest_files=["res://.godot/imported/main_block_atlas.png-fd8c467ff8c806b27f5ad61eaa916704.ctexarray"]
+source_file="res://resources/textures/block/main_block_atlas_far.png"
+dest_files=["res://.godot/imported/main_block_atlas_far.png-6c480a549e735221d22e3791d329bf24.ctexarray"]
 
 [params]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://cebcgsvggrd74"]
+[gd_scene load_steps=8 format=3 uid="uid://cebcgsvggrd74"]
 
 [ext_resource type="PackedScene" uid="uid://cm4e6gfebebtu" path="res://main/misc/basic_free_cam.tscn" id="2_71nyu"]
 
@@ -26,9 +26,6 @@ background_color = Color(0.36, 0.616, 1, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.462291, 0.462291, 0.462291, 1)
 
-[sub_resource type="BoxMesh" id="BoxMesh_ews6d"]
-size = Vector3(1, 100, 1)
-
 [node name="World" type="Node3D"]
 
 [node name="BasicFreeCam" parent="." instance=ExtResource("2_71nyu")]
@@ -49,7 +46,3 @@ directional_shadow_blend_splits = true
 directional_shadow_max_distance = 350.0
 directional_shadow_pancake_size = 0.1
 sky_mode = 1
-
-[node name="MeshInstance3D2" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 50, 0)
-mesh = SubResource("BoxMesh_ews6d")
