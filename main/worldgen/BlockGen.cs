@@ -86,11 +86,11 @@ public partial class BlockGen : Node
     {
         try
         {
-            Parallel.For(0, chunkCount, x =>
-                Parallel.For(0, chunkCount, z => _populateChunk(new Vector2(x, z)))
+            Parallel.For(-chunkCount, chunkCount, x =>
+                Parallel.For(-chunkCount, chunkCount, z => _populateChunk(new Vector2(x, z)))
             );
-            Parallel.For(0, chunkCount, x =>
-                Parallel.For(0, chunkCount, z => _chunkGeneration(new Vector2(x, z)))
+            Parallel.For(-chunkCount, chunkCount, x =>
+                Parallel.For(-chunkCount, chunkCount, z => _chunkGeneration(new Vector2(x, z)))
             );
         }
         catch (Exception e)
@@ -535,36 +535,43 @@ public partial class BlockGen : Node
     int _getBlockIdAt(Vector3 blockPos, Vector2 chunkPos)
     {
         int chunkOffsetX = (int) (blockPos.X + chunkPos.X * CHUNK_SIZE_X);
-        int chunkOffsetY = (int) blockPos.Y;
         int chunkOffsetZ = (int) (blockPos.Z + chunkPos.Y * CHUNK_SIZE_Z);
 
+        if (blockPos.Y < 0 || blockPos.Y >= CHUNK_SIZE_Y) return 0;
+
+        bool exceedsChunkDim = false;
         Vector2 adjChunkPos = Vector2.Zero;
-        if (blockPos.X < 0 || blockPos.X >= CHUNK_SIZE_X || blockPos.Y < 0 || blockPos.Y >= CHUNK_SIZE_Y || blockPos.Z < 0 || blockPos.Z >= CHUNK_SIZE_Z)
+        if (blockPos.X < 0 || blockPos.X >= CHUNK_SIZE_X || blockPos.Z < 0 || blockPos.Z >= CHUNK_SIZE_Z)
         {
+            exceedsChunkDim = true;
             int adjXswitch = blockPos.X >= CHUNK_SIZE_X ? 1 : 0;
             int adjZswitch = blockPos.Z >= CHUNK_SIZE_Z ? 1 : 0;
-            if (adjXswitch == 0 && adjZswitch == 0)
-            {
-                return 0;
-            }
-            else
-            {
-                adjChunkPos = chunkPos + new Vector2(adjXswitch, adjZswitch);
-            }
+            if (adjXswitch==0) adjXswitch = blockPos.X < 0 ? -1 : 0;
+            if (adjZswitch==0) adjZswitch = blockPos.Z < 0 ? -1 : 0;
+
+            adjChunkPos = chunkPos + new Vector2(adjXswitch, adjZswitch);
+            int adjX;
+            int adjZ;
+
+            if (adjXswitch == 1) adjX = Mathf.RoundToInt(blockPos.X - CHUNK_SIZE_X);
+            else if (adjXswitch == -1) adjX = Mathf.RoundToInt(CHUNK_SIZE_X + blockPos.X);
+            else adjX = Mathf.RoundToInt(blockPos.X);
+
+            if (adjZswitch == 1) adjZ = Mathf.RoundToInt(blockPos.Z - CHUNK_SIZE_Z);
+            else if (adjZswitch == -1) adjZ = Mathf.RoundToInt(CHUNK_SIZE_Z + blockPos.Z);
+            else adjZ = Mathf.RoundToInt(blockPos.Z);
+
+            blockPos = new Vector3(adjX, blockPos.Y, adjZ);
         }
         
-        Vector2 _chunk_pos = adjChunkPos.LengthSquared() == 0 ? chunkPos : adjChunkPos;
+        Vector2 _chunk_pos = !exceedsChunkDim ? chunkPos : adjChunkPos;
         int[,,] _chunk_map;
         bool chunkExists = chunkMap.TryGetValue(_chunk_pos, out _chunk_map);
         if (!chunkExists)
         {
             return 0;
         }
-
-        if (chunkOffsetX < 0 || chunkOffsetZ < 0 || chunkOffsetY < 0 || chunkOffsetY >= CHUNK_SIZE_Y)
-        {
-            return 0;
-        }
+        
         int correctedBlockX = Mathf.RoundToInt(blockPos.X / blockSizeMultiplier);
         correctedBlockX = Mathf.Clamp(correctedBlockX, 0, _chunk_map.GetLength(0)-1);
         int correctedBlockY = Mathf.RoundToInt(blockPos.Y / blockSizeMultiplier);
