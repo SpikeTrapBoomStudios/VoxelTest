@@ -20,8 +20,7 @@ using System.Collections.Concurrent;
 [GlobalClass]
 public partial class BlockGen : Node
 {
-    [Export] FastNoiseLite noiseLite = new FastNoiseLite();
-    [Export] FastNoiseLite noiseLite2 = new FastNoiseLite();
+    [Export] FastNoiseLite noiseLite = (FastNoiseLite) GD.Load("res://resources/materials/terrain_noise_main.tres");
     [Export] int chunkCount = 1;
     [Export] int CHUNK_SIZE_X = 32;
     [Export] int CHUNK_SIZE_Z = 32;
@@ -103,13 +102,13 @@ public partial class BlockGen : Node
 
     void _populateChunk(Vector2 chunkPos)
     {
-        var newBlockMap = _populateBlockMap(chunkPos);
+        int[,,] newBlockMap = _populateBlockMap(chunkPos);
         chunkMap[chunkPos] = newBlockMap;
     }
 
     void _chunkGeneration(Vector2 chunkPos)
     {
-        var newMeshData = _createVerts(chunkPos);
+        SysGeneric.Dictionary<string, Object> newMeshData = _createVerts(chunkPos);
 
         GodotDict godotCompatMeshData = new GodotDict();
 
@@ -135,9 +134,9 @@ public partial class BlockGen : Node
             array[(int)Mesh.ArrayType.Index] = data["indices"];
             array[(int)Mesh.ArrayType.TexUV] = data["uvs"];
             array[(int)Mesh.ArrayType.TexUV2] = data["uv2s"];
-            var arrayMesh = new ArrayMesh();
+            ArrayMesh arrayMesh = new ArrayMesh();
             arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, array);
-            var mesh = new MeshInstance3D();
+            MeshInstance3D mesh = new MeshInstance3D();
             mesh.Mesh = arrayMesh;
             AddChild(mesh);
             if (Engine.IsEditorHint())
@@ -157,32 +156,30 @@ public partial class BlockGen : Node
     int[,,] _populateBlockMap(Vector2 chunkPos)
     {
         int[,,] blockMap = new int[CHUNK_SIZE_X / blockSizeMultiplier, CHUNK_SIZE_Y / blockSizeMultiplier, CHUNK_SIZE_Z / blockSizeMultiplier];
+        Stopwatch stopwatch = new();
+        stopwatch.Start();
         for (int x = 0; x < CHUNK_SIZE_X / blockSizeMultiplier; x++)
         {
             int chunkOffsetX = x * blockSizeMultiplier + (int)chunkPos.X * CHUNK_SIZE_X;
-            for (int y = 0; y < CHUNK_SIZE_Y / blockSizeMultiplier; y++)
+            for (int z = 0; z < CHUNK_SIZE_Z / blockSizeMultiplier; z++)
             {
-                for (int z = 0; z < CHUNK_SIZE_Z / blockSizeMultiplier; z++)
+                int chunkOffsetZ = z * blockSizeMultiplier + (int)chunkPos.Y * CHUNK_SIZE_Z;
+
+                float rawHeight = noiseLite.GetNoise2D(chunkOffsetX, chunkOffsetZ);
+                rawHeight = (rawHeight + 1) / 2;
+
+                float surfaceY = rawHeight * terrainScale;
+                surfaceY = Mathf.Pow(3, surfaceY);
+                surfaceY = Math.Clamp(surfaceY, 0, CHUNK_SIZE_Y - 1);
+
+                surfaceY = Mathf.Round(surfaceY);
+
+                for (int y = 0; y <= surfaceY; y++)
                 {
-                    int chunkOffsetZ = z * blockSizeMultiplier + (int)chunkPos.Y * CHUNK_SIZE_Z;
-
-                    float rawHeight = noiseLite.GetNoise2D(chunkOffsetX, chunkOffsetZ);
-                    rawHeight = (rawHeight + 1) / 2;
-
-                    float surfaceY = rawHeight * terrainScale;
-                    surfaceY = Mathf.Pow(2, surfaceY);
-                    surfaceY = Math.Clamp(surfaceY, 0, CHUNK_SIZE_Y - 1);
-
-                    surfaceY = Mathf.Round(surfaceY);
-
                     int correctedY = y * blockSizeMultiplier;
-                    int toleratedRange = (int) (correctedY - surfaceY);
+                    int toleratedRange = (int)(correctedY - surfaceY);
                     int blockId;
-                    if (toleratedRange > 0)
-                    {
-                        blockId = 0;
-                    }
-                    else if (Math.Abs(toleratedRange) < blockSizeMultiplier)
+                    if (Math.Abs(toleratedRange) < blockSizeMultiplier)
                     {
                         blockId = 1;
                     }
@@ -194,6 +191,8 @@ public partial class BlockGen : Node
                 }
             }
         }
+        stopwatch.Stop();
+        GD.Print("Populate chunk time: ", stopwatch.ElapsedMilliseconds);
         return blockMap;
     }
 
@@ -303,15 +302,15 @@ public partial class BlockGen : Node
         int axis1_limit = size[axis1];
         int axis2_limit = size[axis2];
 
-        for (var main = 0; main < main_limit; main++)
+        for (int main = 0; main < main_limit; main++)
         {
             /*This is the mask for-loop. Its job is to populate an array of equal size/organization as the
             chunkMap array, except instead of blocks it is true/false values of whether that block should
             show its face or not, on this side/axis.*/
             bool[,] mask = new bool[axis1_limit, axis2_limit];
-            for (var i = 0; i < axis1_limit; i++)
+            for (int i = 0; i < axis1_limit; i++)
             {
-                for (var j = 0; j < axis2_limit; j++)
+                for (int j = 0; j < axis2_limit; j++)
                 {
                     /*Position is represented as an array so that we can perform [axis]-like
                     operations on it. More modularity essentially.*/
@@ -334,9 +333,9 @@ public partial class BlockGen : Node
             }
 
             bool[,] visited = new bool[axis1_limit, axis2_limit];
-            for (var i = 0; i < axis1_limit; i++)
+            for (int i = 0; i < axis1_limit; i++)
             {
-                for (var j = 0; j < axis2_limit; j++)
+                for (int j = 0; j < axis2_limit; j++)
                     visited[i, j] = false;
             }
 
@@ -377,7 +376,7 @@ public partial class BlockGen : Node
                                 adj_pos[axis1] = (axis1_offset + width_offset) * blockSizeMultiplier;
                                 adj_pos[axis2] = (axis2_offset + height) * blockSizeMultiplier;
                                 adj_pos[axis] = main * blockSizeMultiplier;
-                                var adj_block = _getBlockIdAt(new Vector3(adj_pos[0], adj_pos[1], adj_pos[2]), chunkPos);
+                                int adj_block = _getBlockIdAt(new Vector3(adj_pos[0], adj_pos[1], adj_pos[2]), chunkPos);
                                 if (adj_block != thisBlock) 
                                 {
                                     done = true;
@@ -571,7 +570,7 @@ public partial class BlockGen : Node
         {
             return 0;
         }
-        
+
         int correctedBlockX = Mathf.RoundToInt(blockPos.X / blockSizeMultiplier);
         correctedBlockX = Mathf.Clamp(correctedBlockX, 0, _chunk_map.GetLength(0)-1);
         int correctedBlockY = Mathf.RoundToInt(blockPos.Y / blockSizeMultiplier);
