@@ -4,6 +4,7 @@
 frequency = 0.001
 fractal_octaves = 6
 fractal_lacunarity = 2.1
-fractal_gain = 0.55
-fractal_weighted_strength = 0.1
+domain_warp_enabled = true
+domain_warp_type = 2
+domain_warp_amplitude = 8.715
 domain_warp_fractal_type = 0

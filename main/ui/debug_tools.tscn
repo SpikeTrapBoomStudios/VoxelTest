@@ -1,0 +1,63 @@
+[gd_scene load_steps=2 format=3 uid="uid://biih8kj1oan50"]
+
+[ext_resource type="Script" uid="uid://bvi5i68n7f06" path="res://main/ui/debug_tools.gd" id="1_6nbvs"]
+
+[node name="DebugTools" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_6nbvs")
+
+[node name="GenerateChunksButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 5.0
+offset_top = 213.0
+offset_right = 147.0
+offset_bottom = 244.0
+focus_mode = 0
+text = "Generate Chunks"
+
+[node name="ChunkCountSlider" type="HSlider" parent="."]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 180.0
+offset_right = 265.0
+offset_bottom = 196.0
+min_value = 1.0
+max_value = 50.0
+value = 1.0
+rounded = true
+
+[node name="ChunkCountLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 11.0
+offset_top = 151.0
+offset_right = 116.0
+offset_bottom = 174.0
+text = "Chunk Count:"
+
+[node name="LodSlider" type="HSlider" parent="."]
+layout_mode = 0
+offset_left = 7.0
+offset_top = 129.0
+offset_right = 263.0
+offset_bottom = 145.0
+min_value = 1.0
+max_value = 16.0
+value = 1.0
+rounded = true
+
+[node name="LodLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 100.0
+offset_right = 114.0
+offset_bottom = 123.0
+text = "Block LOD:"
+
+[connection signal="pressed" from="GenerateChunksButton" to="." method="_on_generate_chunks_button_pressed"]
+[connection signal="value_changed" from="ChunkCountSlider" to="." method="_on_chunk_count_slider_value_changed"]
+[connection signal="value_changed" from="LodSlider" to="." method="_on_lod_slider_value_changed"]
