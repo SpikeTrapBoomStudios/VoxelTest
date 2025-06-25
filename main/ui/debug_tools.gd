@@ -1,6 +1,6 @@
 extends Control
 
-@export var block_generation_node: BlockGen
+@export var block_generation_node: BlockGen2
 
 @onready var chunk_count_label: Label = $ChunkCountLabel
 @onready var lod_label: Label = $LodLabel

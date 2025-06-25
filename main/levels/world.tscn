@@ -59,5 +59,6 @@ mesh = SubResource("BoxMesh_7tso0")
 
 [node name="BlockGen2" type="Node" parent="."]
 script = ExtResource("3_ym2ng")
-blockSizeMultiplier = 4
+CHUNK_SIZE_X = 16
+CHUNK_SIZE_Z = 16
 metadata/_custom_type_script = "uid://dd12xd0welt5q"

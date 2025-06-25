@@ -23,7 +23,6 @@ public partial class BlockGen2 : Node
     [Export] byte CHUNK_SIZE_Z = 32;
     [Export] ushort CHUNK_SIZE_Y = 250;
     [Export] byte terrainScale = 10;
-    [Export] byte blockSizeMultiplier = 1;
 
     private bool _generate = false;
     [Export]
@@ -40,7 +39,7 @@ public partial class BlockGen2 : Node
                 }
                 genThread = null;
                 meshes.Clear();
-                chunkMap = new SysGeneric.Dictionary<Vector2,ushort[]>();
+                chunkMap = new ConcurrentDictionary<Vector2,ushort[,,]>();
                 _generateMesh();
             }
         }
@@ -60,12 +59,12 @@ public partial class BlockGen2 : Node
                 }
                 genThread = null;
                 meshes.Clear();
-                chunkMap = new SysGeneric.Dictionary<Vector2,ushort[]>();
+                chunkMap = new ConcurrentDictionary<Vector2,ushort[,,]>();
             }
         }
     }
     List<MeshInstance3D> meshes = new List<MeshInstance3D>();
-    private SysGeneric.Dictionary<Vector2,ushort[]> chunkMap = new SysGeneric.Dictionary<Vector2,ushort[]>();
+    private ConcurrentDictionary<Vector2,ushort[,,]> chunkMap = new ConcurrentDictionary<Vector2,ushort[,,]>();
 
     Thread genThread;
 
@@ -82,24 +81,13 @@ public partial class BlockGen2 : Node
     const byte TOP_FACE = 4;
     const byte BOTTOM_FACE = 5;
 
-    struct ShortVector2(short x = 0, short y = 0)
-    {
-        public short x = x;
-        public short y = y;
-    }
-    struct ShortVector3(short x = 0, short y = 0, short z = 0)
-    {
-        public short x = x;
-        public short y = y;
-        public short z = z;
-    }
     struct MeshData()
     {
         public int c = 0;
-        public List<ShortVector3> vertices = new();
-        public List<int> indices = new();
-        public List<ShortVector2> uvs = new();
-        public List<ShortVector2> uv2s = new();
+        public List<Vector3> vertices = new(10000);
+        public List<int> indices = new(10000);
+        public List<Vector2> uvs = new(10000);
+        public List<Vector2> uv2s = new(10000);
     }
     struct FaceDef(byte axis, sbyte dir)
     {
@@ -129,7 +117,6 @@ public partial class BlockGen2 : Node
         base._ExitTree();
     }
 
-
     void _threadedGenerateChunk()
     {
         try
@@ -149,50 +136,23 @@ public partial class BlockGen2 : Node
     void _chunkGeneration(Vector2 chunkPos)
     {
         MeshData newMeshData = _createVerts(chunkPos);
-
-        GodotDict godotCompatMeshData = new GodotDict();
-
-        Vector3[] vertices = new Vector3[newMeshData.vertices.Count];
-        for (int i = 0; i < newMeshData.vertices.Count; i++)
-        {
-            ShortVector3 shortVector3 = newMeshData.vertices[i];
-            vertices[i] = new Vector3(shortVector3.x, shortVector3.y, shortVector3.z);
-        }
-        godotCompatMeshData.Add("vertices", vertices);
-        int[] indices = newMeshData.indices.ToArray();
-        godotCompatMeshData.Add("indices", indices);
-        Vector2[] uvs = new Vector2[newMeshData.uvs.Count];
-        for (int i = 0; i < newMeshData.uvs.Count; i++)
-        {
-            ShortVector2 shortVector2 = newMeshData.uvs[i];
-            uvs[i] = new Vector2(shortVector2.x, shortVector2.y);
-        }
-        godotCompatMeshData.Add("uvs", uvs);
-        Vector2[] uv2s = new Vector2[newMeshData.uv2s.Count];
-        for (int i = 0; i < newMeshData.uv2s.Count; i++)
-        {
-            ShortVector2 shortVector2 = newMeshData.uv2s[i];
-            uv2s[i] = new Vector2(shortVector2.x, shortVector2.y);
-        }
-        godotCompatMeshData.Add("uv2s", uv2s);
-
-        CallDeferred("_createChunkMeshFromData", godotCompatMeshData, chunkPos);
+        Godot.Collections.Array array = [];
+        array.Resize((int)Mesh.ArrayType.Max);
+        array[(int)Mesh.ArrayType.Vertex] = newMeshData.vertices.ToArray();
+        array[(int)Mesh.ArrayType.Index] = newMeshData.indices.ToArray();
+        array[(int)Mesh.ArrayType.TexUV] = newMeshData.uvs.ToArray();
+        array[(int)Mesh.ArrayType.TexUV2] = newMeshData.uv2s.ToArray();
+        ArrayMesh arrayMesh = new ArrayMesh();
+        arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, array);
+        MeshInstance3D mesh = new MeshInstance3D();
+        mesh.Mesh = arrayMesh;
+        CallDeferred("_createChunkMeshFromData", mesh, chunkPos);
     }
 
-    void _createChunkMeshFromData(Dictionary data, Vector2 chunkPos)
+    void _createChunkMeshFromData(MeshInstance3D mesh, Vector2 chunkPos)
     {
         try
         {
-            Godot.Collections.Array array = [];
-            array.Resize((int)Mesh.ArrayType.Max);
-            array[(int)Mesh.ArrayType.Vertex] = data["vertices"];
-            array[(int)Mesh.ArrayType.Index] = data["indices"];
-            array[(int)Mesh.ArrayType.TexUV] = data["uvs"];
-            array[(int)Mesh.ArrayType.TexUV2] = data["uv2s"];
-            ArrayMesh arrayMesh = new ArrayMesh();
-            arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, array);
-            MeshInstance3D mesh = new MeshInstance3D();
-            mesh.Mesh = arrayMesh;
             AddChild(mesh);
             if (Engine.IsEditorHint())
             {
@@ -213,15 +173,21 @@ public partial class BlockGen2 : Node
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    int _toFlat(short x, short y, short z)
+    {
+        return x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + y * CHUNK_SIZE_Z + z;
+    }
+
     void _populateBlockMap(Vector2 chunkPos)
     {
-        ushort[] blockMap = new ushort[(CHUNK_SIZE_X / blockSizeMultiplier) * (CHUNK_SIZE_Y / blockSizeMultiplier) * (CHUNK_SIZE_Z / blockSizeMultiplier)];
-        for (byte x = 0; x < CHUNK_SIZE_X / blockSizeMultiplier; x++)
+        ushort[,,] blockMap = new ushort[CHUNK_SIZE_X, CHUNK_SIZE_Y, CHUNK_SIZE_Z];
+        for (byte x = 0; x < CHUNK_SIZE_X; x++)
         {
-            int chunkOffsetX = x * blockSizeMultiplier + (int)chunkPos.X * CHUNK_SIZE_X;
-            for (byte z = 0; z < CHUNK_SIZE_Z / blockSizeMultiplier; z++)
+            int chunkOffsetX = x + (int)chunkPos.X * CHUNK_SIZE_X;
+            for (byte z = 0; z < CHUNK_SIZE_Z; z++)
             {
-                int chunkOffsetZ = z * blockSizeMultiplier + (int)chunkPos.Y * CHUNK_SIZE_Z;
+                int chunkOffsetZ = z + (int)chunkPos.Y * CHUNK_SIZE_Z;
 
                 float rawHeight = noiseLite.GetNoise2D(chunkOffsetX, chunkOffsetZ);
                 rawHeight = (rawHeight + 1) / 2;
@@ -232,12 +198,12 @@ public partial class BlockGen2 : Node
 
                 surfaceY = Mathf.Round(surfaceY);
 
-                for (ushort y = 0; y <= surfaceY / blockSizeMultiplier; y++)
+                for (ushort y = 0; y <= surfaceY; y++)
                 {
-                    short correctedY = (short)(y * blockSizeMultiplier);
+                    short correctedY = (short) y;
                     short toleratedRange = (short)Math.Abs(correctedY - surfaceY);
                     ushort blockId;
-                    if (toleratedRange < blockSizeMultiplier)
+                    if (toleratedRange < 1)
                     {
                         blockId = 1;
                     }
@@ -253,80 +219,29 @@ public partial class BlockGen2 : Node
                     {
                         blockId = 4;
                     }
-                    blockMap[_toFlat(x, y, z)] = blockId;
+                    blockMap[x, y, z] = blockId;
                 }
             }
         }
         chunkMap[chunkPos] = blockMap;
     }
 
-    int _toFlat(ushort x, ushort y, ushort z, bool padded = false)
-    {
-        ushort localChunkSizeZ = (ushort) (padded ? CHUNK_SIZE_Z + 2 : CHUNK_SIZE_Z);
-        localChunkSizeZ = (ushort)Mathf.RoundToInt(localChunkSizeZ / blockSizeMultiplier);
-        return x * (ushort)Mathf.RoundToInt(CHUNK_SIZE_Y / blockSizeMultiplier) * localChunkSizeZ + y * localChunkSizeZ + z; 
-    }
-
     MeshData _createVerts(Vector2 chunkPos)
     {
         MeshData thisMeshData = new MeshData();
 
-        ushort PADDED_CHUNK_SIZE_X = (ushort) (CHUNK_SIZE_X + 2);
-        ushort PADDED_CHUNK_SIZE_Z = (ushort) (CHUNK_SIZE_Z + 2);
-        ushort[] paddedChunkData = new ushort[PADDED_CHUNK_SIZE_X / blockSizeMultiplier * (CHUNK_SIZE_Y / blockSizeMultiplier) * (PADDED_CHUNK_SIZE_Z / blockSizeMultiplier)];
-        ushort[] thisChunk = chunkMap[chunkPos];
-        ushort[] xPosChunk = chunkMap.TryGetValue(chunkPos + Vector2.Right, out xPosChunk) ? xPosChunk : null;
-        ushort[] xNegChunk = chunkMap.TryGetValue(chunkPos + Vector2.Left, out xNegChunk) ? xNegChunk : null;
-        ushort[] zPosChunk = chunkMap.TryGetValue(chunkPos + Vector2.Down, out zPosChunk) ? zPosChunk : null;
-        ushort[] zNegChunk = chunkMap.TryGetValue(chunkPos + Vector2.Up, out zNegChunk) ? zNegChunk : null;
-
-        for (ushort x = 0; x < PADDED_CHUNK_SIZE_X / blockSizeMultiplier; x++)
-        {
-            for (ushort z = 0; z < PADDED_CHUNK_SIZE_Z / blockSizeMultiplier; z++)
-            {
-                for (ushort y = 0; y < CHUNK_SIZE_Y / blockSizeMultiplier; y++)
-                {
-                    if (x == 0 || x == (PADDED_CHUNK_SIZE_X - 1) / blockSizeMultiplier || z == 0 || z == (PADDED_CHUNK_SIZE_Z - 1) / blockSizeMultiplier)
-                    {
-                        if (x == 0)
-                        {
-                            if (xNegChunk != null) paddedChunkData[_toFlat(x, y, z, true)] = xNegChunk[_toFlat((ushort)((CHUNK_SIZE_X - 1) / blockSizeMultiplier), y, (ushort)Math.Clamp(z - 1, 0, ((CHUNK_SIZE_Z - 1) / blockSizeMultiplier)))];
-                            else paddedChunkData[_toFlat(x, y, z, true)] = 0;
-                        }
-                        if (x == (PADDED_CHUNK_SIZE_X - 1) / blockSizeMultiplier)
-                        {
-                            if (xPosChunk != null) paddedChunkData[_toFlat(x, y, z, true)] = xPosChunk[_toFlat(0, y, (ushort)Math.Clamp(z - 1, 0, ((CHUNK_SIZE_Z - 1) / blockSizeMultiplier)))];
-                            else paddedChunkData[_toFlat(x, y, z, true)] = 0;
-                        }
-                        if (z == 0)
-                        {
-                            if (zNegChunk != null) paddedChunkData[_toFlat(x, y, z, true)] = zNegChunk[_toFlat((ushort)Math.Clamp(x - 1, 0, ((CHUNK_SIZE_X - 1) / blockSizeMultiplier)), y, (ushort)((CHUNK_SIZE_Z - 1) / blockSizeMultiplier))];
-                            else paddedChunkData[_toFlat(x, y, z, true)] = 0;
-                        }
-                        if (z == (PADDED_CHUNK_SIZE_Z - 1) / blockSizeMultiplier)
-                        {
-                            if (zPosChunk != null) paddedChunkData[_toFlat(x, y, z, true)] = zPosChunk[_toFlat((ushort)Math.Clamp(x - 1, 0, ((CHUNK_SIZE_X - 1) / blockSizeMultiplier)), y, 0)];
-                            else paddedChunkData[_toFlat(x, y, z, true)] = 0;
-                        }   
-                    }
-                    else
-                    {
-                        paddedChunkData[_toFlat(x, y, z, true)] = thisChunk[_toFlat((ushort)(x - 1), y, (ushort)(z - 1))];
-                    }
-                }
-            }
-        }
+        ushort[,,] chunkData = chunkMap.TryGetValue(chunkPos, out chunkData) ? chunkData : null;
 
         foreach (FaceDef face in FaceDefs)
-            {
-                _greedyMeshFace(
-                    ref thisMeshData,
-                    face.axis,
-                    face.dir,
-                    chunkPos,
-                    ref paddedChunkData
-                );
-            }
+        {
+            _greedyMeshFace(
+                ref thisMeshData,
+                face.axis,
+                face.dir,
+                chunkPos,
+                chunkData
+            );
+        }
 
         return thisMeshData;
     }
@@ -349,9 +264,9 @@ public partial class BlockGen2 : Node
         return [0, 1];
     }
 
-    void _greedyMeshFace(ref MeshData meshData, byte axis, sbyte dir, Vector2 chunkPos, ref ushort[] givenChunks)
+    void _greedyMeshFace(ref MeshData meshData, byte axis, sbyte dir, Vector2 chunkPos, ushort[,,] chunkData)
     {
-        ushort[] size = [(ushort)(CHUNK_SIZE_X / blockSizeMultiplier), (ushort)(CHUNK_SIZE_Y / blockSizeMultiplier), (ushort)(CHUNK_SIZE_Z / blockSizeMultiplier)];
+        ushort[] size = [CHUNK_SIZE_X, CHUNK_SIZE_Y, CHUNK_SIZE_Z];
         byte[] perpAxis = _getFaceAxes(axis);
         byte perpAxis1 = perpAxis[0];
         byte perpAxis2 = perpAxis[1];
@@ -361,64 +276,59 @@ public partial class BlockGen2 : Node
         ushort perp2Limit = size[perpAxis2];
         
         bool[] visited = new bool[perp1Limit];
+        bool[] mask = new bool[perp1Limit];
         short[] originPos = new short[3];
         short[] adjPos = new short[3];
-        ShortVector3[] faceVerts = new ShortVector3[4];
-        ShortVector2[] faceUvs = new ShortVector2[4];
+        Vector3[] faceVerts = new Vector3[4];
+        Vector2[] faceUvs = new Vector2[4];
         short[] vert = new short[3];
 
         for (short mainOffest = 0; mainOffest < mainLimit; mainOffest++)
         {
-
             for (short perp2Offset = 0; perp2Offset < perp2Limit; perp2Offset++)
             {
-
                 System.Array.Clear(visited, 0, perp1Limit);
                 for (short perp1Offset = 0; perp1Offset < perp1Limit; perp1Offset++)
                 {
-                    originPos[axis] = (short)(mainOffest * blockSizeMultiplier);
-                    originPos[perpAxis1] = (short)(perp1Offset * blockSizeMultiplier);
-                    originPos[perpAxis2] = (short)(perp2Offset * blockSizeMultiplier);
                     if (visited[perp1Offset]) continue;
-                    ushort blockId = _getBlockIdAt(new ShortVector3((short)(originPos[0]+1), originPos[1], (short)(originPos[2]+1)), chunkPos, ref givenChunks);
+                    originPos[axis] = mainOffest;
+                    originPos[perpAxis1] = perp1Offset;
+                    originPos[perpAxis2] = perp2Offset;
+                    ushort blockId = _getBlockIdAt(originPos[0], originPos[1], originPos[2], chunkData);
                     if (blockId == 0) continue;
                     visited[perp1Offset] = true;
 
                     adjPos[0] = originPos[0];
                     adjPos[1] = originPos[1];
                     adjPos[2] = originPos[2];
-                    adjPos[axis] += (short)(dir * blockSizeMultiplier);
-                    ushort adjOriginBlockId = _getBlockIdAt(new ShortVector3((short)(adjPos[0]+1), adjPos[1], (short)(adjPos[2]+1)), chunkPos, ref givenChunks);
+                    adjPos[axis] += dir;
+                    ushort adjOriginBlockId = _getBlockIdAt(adjPos[0], adjPos[1], adjPos[2], chunkData);
                     if (adjOriginBlockId != 0) continue;
 
                     short width = 1;
                     adjPos[axis] = originPos[axis];
-                    while (true)
+                    while (perp1Offset + width < perp1Limit)
                     {
-                        adjPos[perpAxis1]+=blockSizeMultiplier;
+                        adjPos[perpAxis1]++;
                         if (perp1Offset + width >= visited.Length) break;
                         if (visited[perp1Offset + width]) break;
-                        ushort adjBlockId = _getBlockIdAt(new ShortVector3((short)(adjPos[0]+1), adjPos[1], (short)(adjPos[2]+1)), chunkPos, ref givenChunks);
+                        ushort adjBlockId = _getBlockIdAt(adjPos[0], adjPos[1], adjPos[2], chunkData);
                         if (adjBlockId == 0 || adjBlockId != blockId) break;
                         visited[perp1Offset + width] = true;
                         width++;
                     }
 
                     byte c = 0;
-                    for (byte i=0; i<4; i++)
+                    for (byte i = 0; i < 4; i++)
                     {
-                        short u = 0;
-                        short v = 0;
-                        if (i==0) { u = 0; v = 0; }
-                        else if (i==1) { u = width; v = 0; }
-                        else if (i==2) { u = width; v = 1; }
-                        else if (i==3) { u = 0; v = 1; }
+                        short u = (short)(i == 0 || i == 3 ? 0 : width);
+                        short v = (short)(i == 0 || i == 1 ? 0 : 1);
 
-                        vert[axis] = (short)((mainOffest + (dir == 1 ? 1 : 0)) * blockSizeMultiplier);
-                        vert[perpAxis1] = (short)((perp1Offset + u) * blockSizeMultiplier);
-                        vert[perpAxis2] = (short)((perp2Offset + v) * blockSizeMultiplier);
+                        vert[axis] = (short)(mainOffest + (dir == 1 ? 1 : 0));
+                        vert[perpAxis1] = (short)(perp1Offset + u);
+                        vert[perpAxis2] = (short)(perp2Offset + v);
 
-                        faceVerts[c] = new ShortVector3(vert[0], vert[1], vert[2]);
+                        faceVerts[c] = new Vector3(vert[0], vert[1], vert[2]);
 
                         /*Dont even ask why I need to do this. All that needs to be known is that this
                         flips the uv by 90 degrees. Why would we need this? Because some faces are rotated
@@ -432,30 +342,30 @@ public partial class BlockGen2 : Node
                         {
                             if (sideName == TOP_FACE)
                             {
-                                meshData.uv2s.Add(new ShortVector2(0, 0));
+                                meshData.uv2s.Add(new Vector2(0, 0));
                             }
                             else if (sideName == LEFT_FACE || sideName == RIGHT_FACE || sideName == FRONT_FACE || sideName == BACK_FACE)
                             {
-                                meshData.uv2s.Add(new ShortVector2(1, 0));
+                                meshData.uv2s.Add(new Vector2(1, 0));
                             }
                             else
                             {
-                                meshData.uv2s.Add(new ShortVector2(2, 0));
+                                meshData.uv2s.Add(new Vector2(2, 0));
                             }
                         }
                         else if (blockId == 2)
                         {
-                            meshData.uv2s.Add(new ShortVector2(2, 0));
+                            meshData.uv2s.Add(new Vector2(2, 0));
                         }
                         else if (blockId == 3)
                         {
-                            meshData.uv2s.Add(new ShortVector2(3, 0));
+                            meshData.uv2s.Add(new Vector2(3, 0));
                         }
                         else if (blockId == 4)
                         {
-                            meshData.uv2s.Add(new ShortVector2(4, 0));
+                            meshData.uv2s.Add(new Vector2(4, 0));
                         }
-                        faceUvs[c] = new ShortVector2(u, v);
+                        faceUvs[c] = new Vector2(u, v);
                         c++;
                     }
                     if (dir == DIR_POS)
@@ -520,69 +430,15 @@ public partial class BlockGen2 : Node
         return FRONT_FACE;
     }
     
-    bool _doesBlockExistAt(ShortVector3 blockPos, Vector2 chunkPos, ref ushort[] givenChunks)
-    {
-        return _getBlockIdAt(blockPos, chunkPos, ref givenChunks) != 0;
+    int _clamp(int d, int min, int max) {
+        int t = d < min ? min : d;
+        return t > max ? max : t;
     }
 
-
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    ushort _getBlockIdAt(ShortVector3 blockPos, Vector2 chunkPos, ref ushort[] givenChunks)
+    ushort _getBlockIdAt(short x, short y, short z, ushort[,,] chunkData)
     {
-        if (blockPos.y < 0 || blockPos.y >= CHUNK_SIZE_Y) return 0;
-
-        return givenChunks[_toFlat((ushort)Mathf.Clamp(blockPos.x / blockSizeMultiplier, 0, (CHUNK_SIZE_X/blockSizeMultiplier)-1), (ushort)Mathf.Clamp(blockPos.y / blockSizeMultiplier, 0, (CHUNK_SIZE_Y/blockSizeMultiplier)-1), (ushort)Mathf.Clamp(blockPos.z / blockSizeMultiplier, 0, (CHUNK_SIZE_Z/blockSizeMultiplier)-1), true)];
-        /*bool exceedsChunkDims = false;
-        bool posXadj = false;
-        bool posZadj = false;
-        bool negXadj = false;
-        bool negZadj = false;
-        if (blockPos.x < 0 || blockPos.x >= CHUNK_SIZE_X || blockPos.z < 0 || blockPos.z >= CHUNK_SIZE_Z)
-        {
-            exceedsChunkDims = true;
-            posXadj = blockPos.x >= CHUNK_SIZE_X;
-            posZadj = blockPos.z >= CHUNK_SIZE_Z;
-            negXadj = blockPos.x < 0;
-            negZadj = blockPos.z < 0;
-
-            chunkPos.X += posXadj ? 1 : negXadj ? -1 : 0;
-            chunkPos.Y += posZadj ? 1 : negZadj ? -1 : 0;
-
-            if (posXadj) blockPos.x = (short)(blockPos.x - CHUNK_SIZE_X);
-            else if (negXadj) blockPos.x = (short)(CHUNK_SIZE_X + blockPos.x);
-
-            if (posZadj) blockPos.z = (short)(blockPos.z - CHUNK_SIZE_Z);
-            else if (negZadj) blockPos.z = (short)(CHUNK_SIZE_Z + blockPos.z);
-        }
-
-        blockPos.x = (short)(blockPos.x / blockSizeMultiplier);
-        blockPos.x = (short)Mathf.Clamp(blockPos.x, 0, (CHUNK_SIZE_X/blockSizeMultiplier)-1);
-        blockPos.y = (short)(blockPos.y / blockSizeMultiplier);
-        blockPos.y = (short)Mathf.Clamp(blockPos.y, 0, (CHUNK_SIZE_Y/blockSizeMultiplier)-1);
-        blockPos.z = (short)(blockPos.z / blockSizeMultiplier);
-        blockPos.z = (short)Mathf.Clamp(blockPos.z, 0, (CHUNK_SIZE_Z/blockSizeMultiplier)-1);
-        if (exceedsChunkDims || givenChunks[0] == null)
-        {
-            if (posXadj && givenChunks[4] != null)
-            {
-                return givenChunks[4][blockPos.x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + blockPos.y * CHUNK_SIZE_Z + blockPos.z];
-            }
-            if (negXadj && givenChunks[3] != null)
-            {
-                return givenChunks[3][blockPos.x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + blockPos.y * CHUNK_SIZE_Z + blockPos.z];
-            }
-            if (posZadj && givenChunks[1] != null)
-            {
-                return givenChunks[1][blockPos.x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + blockPos.y * CHUNK_SIZE_Z + blockPos.z];
-            }
-            if (negZadj && givenChunks[2] != null)
-            {
-                return givenChunks[2][blockPos.x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + blockPos.y * CHUNK_SIZE_Z + blockPos.z];
-            }
-            if (!chunkMap.TryGetValue(chunkPos, out ushort[] _chunkMap)) return 0;
-            return _chunkMap[blockPos.x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + blockPos.y * CHUNK_SIZE_Z + blockPos.z];
-        }
-        return givenChunks[0][blockPos.x * CHUNK_SIZE_Y * CHUNK_SIZE_Z + blockPos.y * CHUNK_SIZE_Z + blockPos.z];*/
+        if (y < 0 || y >= CHUNK_SIZE_Y || x < 0 || x >= CHUNK_SIZE_X || z < 0 || z >= CHUNK_SIZE_Z) return 0;
+        return chunkData[x, y, z];
     }
 }
